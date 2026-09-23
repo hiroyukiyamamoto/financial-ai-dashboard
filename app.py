@@ -146,6 +146,59 @@ st.markdown("""
         font-weight: bold;
         font-size: 0.85rem;
     }
+    /* タブの最適化（折り返し・コンパクト化・スクロール矢印非表示） */
+    div[data-baseweb="tab-list"] {
+        display: flex !important;
+        flex-wrap: wrap !important;
+        gap: 6px !important;
+        overflow: visible !important;
+        border-bottom: 2px solid #e2e8f0 !important;
+        padding-bottom: 4px !important;
+    }
+    div[data-baseweb="tab-highlight"] {
+        display: none !important;
+    }
+    button[data-baseweb="tab"] {
+        height: auto !important;
+        padding: 6px 12px !important;
+        font-size: 0.85rem !important;
+        font-weight: 500 !important;
+        color: #4a5568 !important;
+        background-color: #f7fafc !important;
+        border: 1px solid #e2e8f0 !important;
+        border-radius: 6px !important;
+        white-space: nowrap !important;
+        transition: all 0.15s ease-in-out !important;
+    }
+    button[data-baseweb="tab"]:hover {
+        background-color: #edf2f7 !important;
+        border-color: #cbd5e0 !important;
+        color: #1a365d !important;
+    }
+    button[data-baseweb="tab"][aria-selected="true"] {
+        background-color: #1a365d !important;
+        color: #ffffff !important;
+        border-color: #1a365d !important;
+        font-weight: 600 !important;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.12) !important;
+    }
+    /* タブのスクロールボタンを非表示（折り返しで全表示するため） */
+    div[data-baseweb="tab-list"] ~ div button[aria-label="Previous"],
+    div[data-baseweb="tab-list"] ~ div button[aria-label="Next"] {
+        display: none !important;
+    }
+    div[data-baseweb="tab-border"] {
+        display: none !important;
+    }
+    /* トップKPIメトリックカードの文字切れ防止 */
+    div[data-testid="stMetricValue"] {
+        font-size: 1.45rem !important;
+        white-space: nowrap !important;
+    }
+    div[data-testid="stMetricLabel"] {
+        font-size: 0.82rem !important;
+        white-space: nowrap !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -381,12 +434,12 @@ st.markdown("<br>", unsafe_allow_html=True)
 # ── タブナビゲーション ────────────────────────────────────────────────────
 tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
     "📊 業績サマリー",
-    "📈 損益計算書 (P/L)",
-    "🏛️ 貸借対照表 (B/S)",
-    "🔬 デュポン分析 & 健全性診断",
-    "🔮 経営What-Ifシミュレーター",
-    "⚔️ ライフサイエンス2社比較",
-    "📁 データ管理 & レポート出力"
+    "📈 損益 (P/L)",
+    "🏛️ 貸借 (B/S)",
+    "🔬 デュポン・健全性",
+    "🔮 What-If試算",
+    "⚔️ 2社業績比較",
+    "📁 データ＆出力"
 ])
 
 # ── ヘルパー: AIコメントカード描画 ───────────────────────────────────────

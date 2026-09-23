@@ -100,10 +100,15 @@ def get_bs_val(df_bs: pd.DataFrame, item: str, period: str) -> float:
 
 
 def format_currency_oku(val: float) -> str:
-    """千円単位の数値を「〇.〇億円」に整形"""
+    """千円単位の数値を「〇.〇億円」または「〇.〇兆円」に整形"""
     if pd.isna(val):
         return "N/A"
     oku = val / 100000.0
+    if abs(oku) >= 10000:
+        cho = oku / 10000.0
+        return f"{cho:,.2f}兆円"
+    elif abs(oku) >= 1000:
+        return f"{oku:,.0f}億円"
     return f"{oku:,.1f}億円"
 
 
