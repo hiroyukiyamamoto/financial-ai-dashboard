@@ -8,22 +8,10 @@ from typing import Optional, Tuple
 import pandas as pd
 import requests
 import yfinance as yf
+from modules.stock_data import ALL_LIFE_SCIENCE_STOCKS, CATEGORIES
 
-# ライフサイエンス業界の代表銘柄（東証上場・製薬・バイオ・医療機器・診断試薬）
-LIFE_SCIENCE_PRESET_STOCKS = [
-    "武田薬品工業 (4502)",
-    "第一三共 (4568)",
-    "中外製薬 (4519)",
-    "アステラス製薬 (4503)",
-    "エーザイ (4523)",
-    "大塚ホールディングス (4578)",
-    "塩野義製薬 (4507)",
-    "小野薬品工業 (4528)",
-    "テルモ (4543)",
-    "シスメックス (6869)",
-    "参天製薬 (4536)",
-    "ペプチドリーム (4587)"
-]
+# 東証上場ライフサイエンス全銘柄リスト（122社）
+LIFE_SCIENCE_PRESET_STOCKS = [s["name"] for s in ALL_LIFE_SCIENCE_STOCKS]
 
 
 def resolve_ticker(query: str) -> Tuple[Optional[str], Optional[str]]:
@@ -36,22 +24,35 @@ def resolve_ticker(query: str) -> Tuple[Optional[str], Optional[str]]:
         
     q = query.strip()
     
-    # 1. 4桁の日本銘柄コード（例: 7203, 4502, 4519）
-    if re.match(r"^\d{4}$", q):
-        return f"{q}.T", None
+    # 0. ライフサイエンス全銘柄マスター（122社）からの高速完全一致・部分一致
+    q_norm = q.lower().replace(" ", "").replace("　", "")
+    if q_norm in ["hmt", "ヒューマンメタボローム", "ヒューマンメタボロームテクノロジーズ"]:
+        return "6090.T", "ヒューマン・メタボローム・テクノロジーズ (6090)"
+
+    for stock in ALL_LIFE_SCIENCE_STOCKS:
+        code = stock["code"]
+        name = stock["company_name"]
+        if q == code or q == f"{code}.T" or q == f"{code}.t":
+            return f"{code}.T", stock["name"]
+        if q in name or name in q:
+            return f"{code}.T", stock["name"]
+
+    # 1. 4桁（または英数字付きコード）の日本銘柄コード（例: 7203, 6090, 130A, 206A）
+    if re.match(r"^\d{3,4}[A-Za-z]?$", q):
+        return f"{q.upper()}.T", None
         
-    # 2. すでに .T 付き（例: 7203.T）
-    if re.match(r"^\d{4}\.[tT]$", q):
+    # 2. すでに .T 付き（例: 7203.T, 6090.T, 130A.T）
+    if re.match(r"^\d{3,4}[A-Za-z]?\.[tT]$", q):
         return q.upper(), None
         
     # 3. 米国株シンボル（例: AAPL, MSFT, PFE）
     if re.match(r"^[A-Za-z]{1,5}$", q):
         return q.upper(), None
 
-    # 4. 文字列中に4桁コードが含まれている場合（例: "トヨタ (7203)"）
-    code_match = re.search(r"\b(\d{4})\b", q)
+    # 4. 文字列中にコードが含まれている場合（例: "武田薬品工業 (4502)", "ヒューマン・メタボローム・テクノロジーズ (6090)"）
+    code_match = re.search(r"\((\d{3,4}[A-Za-z]?)\)", q) or re.search(r"\b(\d{4})\b", q)
     if code_match:
-        return f"{code_match.group(1)}.T", None
+        return f"{code_match.group(1).upper()}.T", None
 
     # 5. 日本語企業名検索（Yahoo!ファイナンス検索から抽出）
     try:

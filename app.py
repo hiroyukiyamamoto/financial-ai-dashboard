@@ -52,6 +52,8 @@ from modules.stock_fetcher import (
     fetch_company_financials,
     extract_company_kpis,
     LIFE_SCIENCE_PRESET_STOCKS,
+    ALL_LIFE_SCIENCE_STOCKS,
+    CATEGORIES,
 )
 import re
 
@@ -217,24 +219,38 @@ with st.sidebar:
     st.title("📊 財務AI設定")
 
     # 1. 会社名・銘柄コードの選択と取得
-    st.subheader("🏢 銘柄・企業データの取得")
+    st.subheader("🏢 ライフサイエンス銘柄の取得")
 
-    PRESET_STOCKS = ["-- 代表銘柄から選択 --"] + LIFE_SCIENCE_PRESET_STOCKS
+    # セクター・カテゴリ絞り込み
+    selected_cat = st.selectbox(
+        "セクター / カテゴリで絞り込み",
+        CATEGORIES,
+        index=0,
+        key="sector_category_filter",
+        help="製薬、創薬バイオ、医療機器、検査・支援などの分野で絞り込みできます。"
+    )
+
+    if selected_cat == "すべて (全社)":
+        filtered_stocks = ALL_LIFE_SCIENCE_STOCKS
+    else:
+        filtered_stocks = [s for s in ALL_LIFE_SCIENCE_STOCKS if s["category"] == selected_cat]
+
+    stock_options = ["-- ライフサイエンス銘柄を選択 --"] + [s["name"] for s in filtered_stocks]
 
     preset_choice = st.selectbox(
-        "代表銘柄から選ぶ（ライフサイエンス業界）",
-        PRESET_STOCKS,
+        f"東証上場ライフサイエンス企業 ({len(filtered_stocks)}社)",
+        stock_options,
         index=0,
         key="preset_stock_selector",
-        help="東証上場の代表的なライフサイエンス（製薬・バイオ・医療機器・診断試薬）企業の財務諸表をロードします。"
+        help="東証上場の全ライフサイエンス企業から選択できます（インクリメンタル検索・オートコンプリート対応）。"
     )
 
     stock_query_input = st.text_input(
         "または銘柄コード・企業名を入力",
         value="",
-        placeholder="例: 7203, 武田薬品, 4519, 6758",
+        placeholder="例: 6090, 4502, ヒューマンメタボローム, 武田薬品",
         key="stock_query_text",
-        help="4桁の証券コード（例: 7203, 4502）や日本語の企業名を入力して「🔍 データを取得」をクリックしてください。"
+        help="証券コード（例: 6090, 4502）や日本語企業名・略称（例: ヒューマンメタボローム, HMT）を入力して「🔍 データを取得」をクリックしてください。"
     )
 
     col_fetch, col_sample = st.columns([1.5, 1])
@@ -247,8 +263,8 @@ with st.sidebar:
         target = None
         if stock_query_input and stock_query_input.strip():
             target = stock_query_input.strip()
-        elif preset_choice != "-- 代表銘柄から選択 --":
-            m_code = re.search(r"\((\d{4})\)", preset_choice)
+        elif preset_choice != "-- ライフサイエンス銘柄を選択 --":
+            m_code = re.search(r"\((\d{3,4}[A-Za-z]?)\)", preset_choice)
             target = m_code.group(1) if m_code else preset_choice
 
         if target:
@@ -668,13 +684,23 @@ with tab6:
     st.subheader("⚔️ ライフサイエンス業界 2社業績・財務ベンチマーク比較")
     st.caption("東証上場の代表的ライフサイエンス・製薬・バイオ・医療機器企業2社を選択し、事業規模、収益性、資本効率（デュポン分解）、安全性を多角的に比較します。")
 
+    # 初期選択インデックス（企業A: 4502 武田薬品, 企業B: 6090 ヒューマンメタボローム）
+    def get_stock_idx(stocks, code_target, default_idx=0):
+        for i, s in enumerate(stocks):
+            if f"({code_target})" in s:
+                return i
+        return default_idx
+
+    idx_a = get_stock_idx(LIFE_SCIENCE_PRESET_STOCKS, "4502", 0)
+    idx_b = get_stock_idx(LIFE_SCIENCE_PRESET_STOCKS, "6090", 1)
+
     col_sel_a, col_sel_b = st.columns(2)
     with col_sel_a:
         st.markdown("#### 🔵 企業 A")
         choice_a = st.selectbox(
-            "代表銘柄から選ぶ (企業A)",
+            "東証上場ライフサイエンス企業から選ぶ (企業A)",
             LIFE_SCIENCE_PRESET_STOCKS,
-            index=0,  # 武田薬品工業 (4502)
+            index=idx_a,
             key="comp_choice_a"
         )
         custom_a = st.text_input("または銘柄コード・企業名 (企業A)", value="", placeholder="例: 4502, 武田薬品", key="comp_custom_a")
@@ -682,12 +708,12 @@ with tab6:
     with col_sel_b:
         st.markdown("#### 🟠 企業 B")
         choice_b = st.selectbox(
-            "代表銘柄から選ぶ (企業B)",
+            "東証上場ライフサイエンス企業から選ぶ (企業B)",
             LIFE_SCIENCE_PRESET_STOCKS,
-            index=1,  # 第一三共 (4568)
+            index=idx_b,
             key="comp_choice_b"
         )
-        custom_b = st.text_input("または銘柄コード・企業名 (企業B)", value="", placeholder="例: 4568, 第一三共", key="comp_custom_b")
+        custom_b = st.text_input("または銘柄コード・企業名 (企業B)", value="", placeholder="例: 6090, ヒューマンメタボローム, 4568", key="comp_custom_b")
 
     btn_compare = st.button("⚔️ 2社の財務データを取得して比較実行", type="primary", use_container_width=True)
 
@@ -697,12 +723,12 @@ with tab6:
     if btn_compare:
         # Determine query A
         q_a = custom_a.strip() if custom_a and custom_a.strip() else choice_a
-        m_a = re.search(r"\((\d{4})\)", q_a)
+        m_a = re.search(r"\((\d{3,4}[A-Za-z]?)\)", q_a)
         target_a = m_a.group(1) if m_a else q_a
 
         # Determine query B
         q_b = custom_b.strip() if custom_b and custom_b.strip() else choice_b
-        m_b = re.search(r"\((\d{4})\)", q_b)
+        m_b = re.search(r"\((\d{3,4}[A-Za-z]?)\)", q_b)
         target_b = m_b.group(1) if m_b else q_b
 
         with st.spinner(f"『{target_a}』と『{target_b}』の財務データを取得中..."):

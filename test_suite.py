@@ -127,16 +127,24 @@ def test_all():
         plot_comparison_margins,
         plot_comparison_dupont,
     )
-    # プリセット検証（ライフサイエンス限定 & 6090完全除外）
-    assert len(LIFE_SCIENCE_PRESET_STOCKS) >= 10
+    # プリセット検証（東証全ライフサイエンス銘柄網羅 & 6090含有 & 一般製造業7203除外）
+    assert len(LIFE_SCIENCE_PRESET_STOCKS) >= 100
     assert any("4502" in s for s in LIFE_SCIENCE_PRESET_STOCKS)
     assert any("4568" in s for s in LIFE_SCIENCE_PRESET_STOCKS)
-    assert not any("6090" in s for s in LIFE_SCIENCE_PRESET_STOCKS)
+    assert any("6090" in s for s in LIFE_SCIENCE_PRESET_STOCKS)  # ヒューマン・メタボローム・テクノロジーズ含有
     assert not any("7203" in s for s in LIFE_SCIENCE_PRESET_STOCKS)
+
+    # 6090 (ヒューマン・メタボローム・テクノロジーズ) 財務データ取得テスト
+    pl_6090, bs_6090, sum_6090, name_6090 = fetch_company_financials("6090")
+    assert not pl_6090.empty and not bs_6090.empty and not sum_6090.empty
+    assert "6090" in name_6090
+    print(f"  -> OK (6090 ヒューマン・メタボローム・テクノロジーズ 取得成功: {name_6090})")
 
     # 2社KPI抽出
     kpi_a = extract_company_kpis(f_pl, f_bs, f_sum, f_name)
+    kpi_b = extract_company_kpis(pl_6090, bs_6090, sum_6090, name_6090)
     assert kpi_a["metrics"].rev_curr > 0
+    assert kpi_b["metrics"].rev_curr > 0
 
     # 比較評価
     comp_eval = evaluate_two_companies_comparison(kpi_a, kpi_a)
