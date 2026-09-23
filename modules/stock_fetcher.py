@@ -9,6 +9,22 @@ import pandas as pd
 import requests
 import yfinance as yf
 
+# ライフサイエンス業界の代表銘柄（東証上場・製薬・バイオ・医療機器・診断試薬）
+LIFE_SCIENCE_PRESET_STOCKS = [
+    "武田薬品工業 (4502)",
+    "第一三共 (4568)",
+    "中外製薬 (4519)",
+    "アステラス製薬 (4503)",
+    "エーザイ (4523)",
+    "大塚ホールディングス (4578)",
+    "塩野義製薬 (4507)",
+    "小野薬品工業 (4528)",
+    "テルモ (4543)",
+    "シスメックス (6869)",
+    "参天製薬 (4536)",
+    "ペプチドリーム (4587)"
+]
+
 
 def resolve_ticker(query: str) -> Tuple[Optional[str], Optional[str]]:
     """
@@ -229,3 +245,31 @@ def fetch_company_financials(query: str) -> Tuple[Optional[pd.DataFrame], Option
     df_summary = pd.DataFrame(summary_rows)
 
     return df_pl, df_bs, df_summary, display_name
+
+
+def extract_company_kpis(df_pl: pd.DataFrame, df_bs: pd.DataFrame, df_summary: Optional[pd.DataFrame], display_name: str) -> dict:
+    """
+    PL, BS, Summaryから2社比較用の標準KPI辞書を生成します。
+    """
+    from .data_loader import get_periods_from_pl, get_periods_from_bs
+    from .metrics import calculate_metrics, evaluate_financial_health
+
+    pl_prev, pl_curr = get_periods_from_pl(df_pl)
+    bs_prev, bs_curr = get_periods_from_bs(df_bs)
+    p_prev = pl_prev or (bs_prev or "前期")
+    p_curr = pl_curr or (bs_curr or "当期")
+
+    m = calculate_metrics(df_pl, df_bs, df_summary, p_prev, p_curr)
+    health = evaluate_financial_health(m)
+
+    return {
+        "name": display_name,
+        "period_curr": p_curr,
+        "period_prev": p_prev,
+        "metrics": m,
+        "health": health,
+        "df_pl": df_pl,
+        "df_bs": df_bs,
+        "df_summary": df_summary
+    }
+

@@ -428,3 +428,173 @@ def plot_health_radar(scores: Dict[str, float]) -> go.Figure:
         showlegend=False
     )
     return fig
+
+
+def plot_comparison_radar(kpi_a: dict, kpi_b: dict) -> go.Figure:
+    """2社財務5軸総合レーダーチャート（0-100スコア化）"""
+    ma: FinancialMetrics = kpi_a["metrics"]
+    mb: FinancialMetrics = kpi_b["metrics"]
+
+    def normalize_scores(m: FinancialMetrics) -> List[float]:
+        # 収益性: 営業利益率 (0% -> 20, 25%以上 -> 100)
+        s_op = min(100.0, max(10.0, (m.op_margin_curr / 25.0) * 80.0 + 20.0))
+        # 安全性: 自己資本比率 (0% -> 10, 80%以上 -> 100)
+        s_eq = min(100.0, max(10.0, (m.equity_ratio_curr / 80.0) * 90.0 + 10.0))
+        # 資本効率: ROE (0% -> 20, 18%以上 -> 100)
+        s_roe = min(100.0, max(10.0, (m.roe_curr / 18.0) * 80.0 + 20.0))
+        # 資産効率: 総資産回転率 (0 -> 10, 1.2回以上 -> 100)
+        s_turn = min(100.0, max(10.0, (m.dupont_turnover_curr / 1.2) * 90.0 + 10.0))
+        # 成長性: 売上成長率 (-10% -> 20, +20%以上 -> 100)
+        s_grow = min(100.0, max(10.0, ((m.rev_growth_rate + 10.0) / 30.0) * 80.0 + 20.0))
+        return [round(s_op, 1), round(s_eq, 1), round(s_roe, 1), round(s_turn, 1), round(s_grow, 1)]
+
+    categories = ["収益性 (営業利益率)", "安全性 (自己資本比率)", "資本効率 (ROE)", "資産効率 (総資産回転率)", "成長性 (売上高成長率)"]
+    
+    vals_a = normalize_scores(ma)
+    vals_b = normalize_scores(mb)
+    
+    cats_closed = categories + [categories[0]]
+    vals_a_closed = vals_a + [vals_a[0]]
+    vals_b_closed = vals_b + [vals_b[0]]
+
+    fig = go.Figure()
+    
+    fig.add_trace(go.Scatterpolar(
+        r=vals_a_closed,
+        theta=cats_closed,
+        fill="toself",
+        fillcolor="rgba(44, 123, 182, 0.35)",
+        line=dict(color=COL_MAIN, width=2.5),
+        name=kpi_a["name"],
+        marker=dict(size=7, color=COL_MAIN)
+    ))
+    
+    fig.add_trace(go.Scatterpolar(
+        r=vals_b_closed,
+        theta=cats_closed,
+        fill="toself",
+        fillcolor="rgba(247, 127, 0, 0.35)",
+        line=dict(color=COL_SUB, width=2.5),
+        name=kpi_b["name"],
+        marker=dict(size=7, color=COL_SUB)
+    ))
+
+    fig.update_layout(
+        **TEMPLATE_LAYOUT,
+        title=dict(text="<b>⚔️ 2社 総合財務力レーダー比較（各軸100点換算）</b>", font=dict(size=14)),
+        polar=dict(
+            radialaxis=dict(visible=True, range=[0, 100], gridcolor="#e0e0e0")
+        ),
+        legend=dict(orientation="h", y=-0.15, x=0.5, xanchor="center")
+    )
+    return fig
+
+
+def plot_comparison_scale_bars(kpi_a: dict, kpi_b: dict) -> go.Figure:
+    """2社の主要財務規模比較（売上・利益・資本）（億円換算）"""
+    ma: FinancialMetrics = kpi_a["metrics"]
+    mb: FinancialMetrics = kpi_b["metrics"]
+
+    # 千円 -> 億円
+    to_oku = lambda val: round(val / 100000.0, 1)
+
+    labels = ["売上高", "営業利益", "当期純利益", "純資産 (自己資本)"]
+    vals_a = [to_oku(ma.rev_curr), to_oku(ma.op_curr), to_oku(ma.ni_curr), to_oku(ma.eq_curr)]
+    vals_b = [to_oku(mb.rev_curr), to_oku(mb.op_curr), to_oku(mb.ni_curr), to_oku(mb.eq_curr)]
+
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        x=labels, y=vals_a,
+        name=kpi_a["name"],
+        marker=dict(color=COL_MAIN),
+        text=[f"{v:,}億円" for v in vals_a],
+        textposition="auto"
+    ))
+    fig.add_trace(go.Bar(
+        x=labels, y=vals_b,
+        name=kpi_b["name"],
+        marker=dict(color=COL_SUB),
+        text=[f"{v:,}億円" for v in vals_b],
+        textposition="auto"
+    ))
+
+    fig.update_layout(
+        **TEMPLATE_LAYOUT,
+        barmode="group",
+        title=dict(text="<b>事業規模・利益創出力の直接比較（億円）</b>", font=dict(size=14)),
+        yaxis=dict(title="億円", gridcolor="#e5e5e5"),
+        legend=dict(orientation="h", y=-0.15, x=0.5, xanchor="center")
+    )
+    return fig
+
+
+def plot_comparison_margins(kpi_a: dict, kpi_b: dict) -> go.Figure:
+    """2社の利益率・経営効率指標比較（%）"""
+    ma: FinancialMetrics = kpi_a["metrics"]
+    mb: FinancialMetrics = kpi_b["metrics"]
+
+    labels = ["売上総利益率", "営業利益率", "当期純利益率", "自己資本比率", "ROE"]
+    vals_a = [round(ma.gp_margin_curr, 1), round(ma.op_margin_curr, 1), round(ma.ni_margin_curr, 1), round(ma.equity_ratio_curr, 1), round(ma.roe_curr, 1)]
+    vals_b = [round(mb.gp_margin_curr, 1), round(mb.op_margin_curr, 1), round(mb.ni_margin_curr, 1), round(mb.equity_ratio_curr, 1), round(mb.roe_curr, 1)]
+
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        x=labels, y=vals_a,
+        name=kpi_a["name"],
+        marker=dict(color=COL_MAIN),
+        text=[f"{v:+.1f}%" for v in vals_a],
+        textposition="auto"
+    ))
+    fig.add_trace(go.Bar(
+        x=labels, y=vals_b,
+        name=kpi_b["name"],
+        marker=dict(color=COL_SUB),
+        text=[f"{v:+.1f}%" for v in vals_b],
+        textposition="auto"
+    ))
+
+    fig.update_layout(
+        **TEMPLATE_LAYOUT,
+        barmode="group",
+        title=dict(text="<b>利益率・資本健全性指標の比較（%）</b>", font=dict(size=14)),
+        yaxis=dict(title="%", gridcolor="#e5e5e5"),
+        legend=dict(orientation="h", y=-0.15, x=0.5, xanchor="center")
+    )
+    return fig
+
+
+def plot_comparison_dupont(kpi_a: dict, kpi_b: dict) -> go.Figure:
+    """2社のデュポン分析3要素比較"""
+    ma: FinancialMetrics = kpi_a["metrics"]
+    mb: FinancialMetrics = kpi_b["metrics"]
+
+    fig = go.Figure()
+    
+    factors = ["① 売上高当期純利益率 (%)", "② 総資産回転率 (回)", "③ 財務レバレッジ (倍)"]
+    vals_a = [round(ma.dupont_margin_curr, 1), round(ma.dupont_turnover_curr, 2), round(ma.dupont_leverage_curr, 2)]
+    vals_b = [round(mb.dupont_margin_curr, 1), round(mb.dupont_turnover_curr, 2), round(mb.dupont_leverage_curr, 2)]
+
+    fig.add_trace(go.Bar(
+        name=kpi_a["name"],
+        x=factors, y=vals_a,
+        marker=dict(color=COL_MAIN),
+        text=[f"{vals_a[0]}%", f"{vals_a[1]}回", f"{vals_a[2]}倍"],
+        textposition="auto"
+    ))
+    fig.add_trace(go.Bar(
+        name=kpi_b["name"],
+        x=factors, y=vals_b,
+        marker=dict(color=COL_SUB),
+        text=[f"{vals_b[0]}%", f"{vals_b[1]}回", f"{vals_b[2]}倍"],
+        textposition="auto"
+    ))
+
+    fig.update_layout(
+        **TEMPLATE_LAYOUT,
+        barmode="group",
+        title=dict(text=f"<b>デュポン分析比較 (ROE: {ma.roe_curr:.1f}% vs {mb.roe_curr:.1f}%)</b>", font=dict(size=14)),
+        yaxis=dict(gridcolor="#e5e5e5"),
+        legend=dict(orientation="h", y=-0.15, x=0.5, xanchor="center")
+    )
+    return fig
+

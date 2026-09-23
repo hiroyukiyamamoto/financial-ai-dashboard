@@ -360,3 +360,97 @@ def evaluate_financial_health(m: FinancialMetrics) -> Dict[str, Any]:
         "cautions": cautions,
         "summary_text": summary_text
     }
+
+
+def evaluate_two_companies_comparison(kpi_a: dict, kpi_b: dict) -> dict:
+    """
+    ライフサイエンス業界の視点を踏まえた2社業績・財務比較診断エンジン。
+    """
+    name_a = kpi_a["name"]
+    name_b = kpi_b["name"]
+    ma: FinancialMetrics = kpi_a["metrics"]
+    mb: FinancialMetrics = kpi_b["metrics"]
+
+    # 1. 規模判定
+    scale_leader = name_a if ma.rev_curr >= mb.rev_curr else name_b
+    rev_ratio = (ma.rev_curr / mb.rev_curr) if mb.rev_curr > 0 else 1.0
+
+    # 2. 収益性判定
+    prof_leader = name_a if ma.op_margin_curr >= mb.op_margin_curr else name_b
+    op_diff = abs(ma.op_margin_curr - mb.op_margin_curr)
+
+    # 3. 健全性判定
+    safety_leader = name_a if ma.equity_ratio_curr >= mb.equity_ratio_curr else name_b
+
+    # 4. 資本効率判定
+    roe_leader = name_a if ma.roe_curr >= mb.roe_curr else name_b
+
+    highlights = []
+    
+    # 規模
+    if rev_ratio >= 1.5:
+        highlights.append(f"【事業規模】{name_a} が売上高で {name_b} を約 {rev_ratio:.1f}倍 上回り、メガファーマ・大手としてのグローバル事業規模・販売網で優位に立っています。")
+    elif rev_ratio <= 0.67:
+        highlights.append(f"【事業規模】{name_b} が売上高で {name_a} を約 {(1.0/rev_ratio):.1f}倍 上回り、スケールメリットと市場カバレッジでリードしています。")
+    else:
+        highlights.append(f"【事業規模】両社の売上規模は比較的拮抗しており（規模比 {rev_ratio:.2f}倍）、業界内での直接的なライバル関係にあります。")
+
+    # 収益力 (ライフサイエンス特有の粗利率・営業利益率)
+    if op_diff >= 5.0:
+        leader = name_a if ma.op_margin_curr > mb.op_margin_curr else name_b
+        trailer = name_b if leader == name_a else name_a
+        m_high = max(ma.op_margin_curr, mb.op_margin_curr)
+        m_low = min(ma.op_margin_curr, mb.op_margin_curr)
+        highlights.append(f"【本業の稼ぐ力】{leader}（営業利益率 {m_high:.1f}%）が {trailer}（同 {m_low:.1f}%）を {op_diff:.1f}ポイント 凌駕しており、高付加価値新薬・特許製品の比率や価格決定力で強みを発揮しています。")
+    else:
+        highlights.append(f"【本業の稼ぐ力】営業利益率は {name_a}: {ma.op_margin_curr:.1f}% vs {name_b}: {mb.op_margin_curr:.1f}% と僅差（差 {op_diff:.1f}pt）で、両社ともに同等の利益創出力を持っています。")
+
+    # 資本健全性 & 研究開発余力
+    if abs(ma.equity_ratio_curr - mb.equity_ratio_curr) >= 15.0:
+        s_lead = name_a if ma.equity_ratio_curr > mb.equity_ratio_curr else name_b
+        s_trail = name_b if s_lead == name_a else name_a
+        eq_high = max(ma.equity_ratio_curr, mb.equity_ratio_curr)
+        eq_low = min(ma.equity_ratio_curr, mb.equity_ratio_curr)
+        highlights.append(f"【財務健全性・R&D投資余力】自己資本比率は {s_lead}（{eq_high:.1f}%）が {s_trail}（{eq_low:.1f}%）を大きく上回り、臨床開発パイプラインの失敗リスクや大型買収・アライアンスに対する高い耐震力を誇ります。")
+    else:
+        highlights.append(f"【財務健全性】自己資本比率は {name_a}: {ma.equity_ratio_curr:.1f}% vs {name_b}: {mb.equity_ratio_curr:.1f}% となり、両社とも業界標準に見合った財務クッションを維持しています。")
+
+    # デュポン分解の要因分析
+    dupont_comment = ""
+    if ma.roe_curr > mb.roe_curr:
+        if ma.dupont_margin_curr > mb.dupont_margin_curr:
+            factor = "高マージン（純利益率の高さ）"
+        elif ma.dupont_turnover_curr > mb.dupont_turnover_curr:
+            factor = "高い総資産回転率（資本の効率的活用）"
+        else:
+            factor = "レバレッジ活用"
+        dupont_comment = f"ROE（株主資本利益率）は {name_a}（{ma.roe_curr:.1f}%）が {name_b}（{mb.roe_curr:.1f}%）を上回っており、特に『{factor}』が主たる牽引役となっています。"
+    else:
+        if mb.dupont_margin_curr > ma.dupont_margin_curr:
+            factor = "高マージン（純利益率の高さ）"
+        elif mb.dupont_turnover_curr > ma.dupont_turnover_curr:
+            factor = "高い総資産回転率（資本の効率的活用）"
+        else:
+            factor = "レバレッジ活用"
+        dupont_comment = f"ROE（株主資本利益率）は {name_b}（{mb.roe_curr:.1f}%）が {name_a}（{ma.roe_curr:.1f}%）を上回っており、特に『{factor}』が主たる牽引役となっています。"
+    highlights.append(f"【デュポン資本効率分析】{dupont_comment}")
+
+    # ライフサイエンス業界総括
+    commentary = (
+        f"### 🔬 ライフサイエンス・アナリスト比較総括\n\n"
+        f"**{name_a}** と **{name_b}** をライフサイエンス・ヘルスケアの事業構造の観点から比較すると、以下の特徴が明確です：\n\n"
+        + "\n".join([f"・{h}" for h in highlights]) + "\n\n"
+        f"**投資・事業戦略の視点:**\n"
+        f"- ライフサイエンス業界において新薬・高度医療機器の創出には数百億〜数千億円規模の研究開発投資（R&D）と10年スパンの開発期間を要します。\n"
+        f"- **{scale_leader}** は豊富なキャッシュフローとスケールを活かしたグローバル大型臨床試験・M&Aの実行力に長けており、一方で **{prof_leader}** は高収益な主力製品ポートフォリオにより高い資本効率を創出しています。"
+    )
+
+    return {
+        "scale_leader": scale_leader,
+        "profitability_leader": prof_leader,
+        "safety_leader": safety_leader,
+        "roe_leader": roe_leader,
+        "highlights": highlights,
+        "commentary": commentary
+    }
+

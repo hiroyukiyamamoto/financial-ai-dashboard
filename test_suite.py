@@ -118,6 +118,37 @@ def test_all():
     assert "4502" in f_name
     print(f"  -> OK (4502 自動取得成功: {f_name}, {len(f_pl)} 項目)")
 
+    print("[7/7] ライフサイエンス2社業績比較機能＆チャートテスト...")
+    from modules.stock_fetcher import LIFE_SCIENCE_PRESET_STOCKS, extract_company_kpis
+    from modules.metrics import evaluate_two_companies_comparison
+    from modules.charts import (
+        plot_comparison_radar,
+        plot_comparison_scale_bars,
+        plot_comparison_margins,
+        plot_comparison_dupont,
+    )
+    # プリセット検証（ライフサイエンス限定 & 6090完全除外）
+    assert len(LIFE_SCIENCE_PRESET_STOCKS) >= 10
+    assert any("4502" in s for s in LIFE_SCIENCE_PRESET_STOCKS)
+    assert any("4568" in s for s in LIFE_SCIENCE_PRESET_STOCKS)
+    assert not any("6090" in s for s in LIFE_SCIENCE_PRESET_STOCKS)
+    assert not any("7203" in s for s in LIFE_SCIENCE_PRESET_STOCKS)
+
+    # 2社KPI抽出
+    kpi_a = extract_company_kpis(f_pl, f_bs, f_sum, f_name)
+    assert kpi_a["metrics"].rev_curr > 0
+
+    # 比較評価
+    comp_eval = evaluate_two_companies_comparison(kpi_a, kpi_a)
+    assert "ライフサイエンス・アナリスト比較総括" in comp_eval["commentary"]
+
+    # チャート生成
+    fig_radar = plot_comparison_radar(kpi_a, kpi_a)
+    fig_scale = plot_comparison_scale_bars(kpi_a, kpi_a)
+    fig_marg = plot_comparison_margins(kpi_a, kpi_a)
+    fig_dup = plot_comparison_dupont(kpi_a, kpi_a)
+    assert fig_radar is not None and fig_scale is not None and fig_marg is not None and fig_dup is not None
+    print("  -> OK (2社比較評価・レーダーチャート・並行棒グラフすべて正常生成)")
 
     print("\n==========================================")
     print("  すべてのテストが正常に通過しました！ (ALL PASSED)")

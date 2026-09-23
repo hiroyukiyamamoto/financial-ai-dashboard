@@ -22,6 +22,7 @@ from modules.data_loader import (
 from modules.metrics import (
     calculate_metrics,
     evaluate_financial_health,
+    evaluate_two_companies_comparison,
 )
 from modules.charts import (
     plot_summary_trends,
@@ -37,13 +38,21 @@ from modules.charts import (
     plot_dupont_factors,
     plot_bep_analysis,
     plot_health_radar,
+    plot_comparison_radar,
+    plot_comparison_scale_bars,
+    plot_comparison_margins,
+    plot_comparison_dupont,
 )
 from modules.ai_service import (
     generate_all_comments,
     RECOMMENDED_MODELS,
     DEFAULT_MODEL,
 )
-from modules.stock_fetcher import fetch_company_financials
+from modules.stock_fetcher import (
+    fetch_company_financials,
+    extract_company_kpis,
+    LIFE_SCIENCE_PRESET_STOCKS,
+)
 import re
 
 from modules.report_exporter import generate_html_report
@@ -157,26 +166,14 @@ with st.sidebar:
     # 1. 会社名・銘柄コードの選択と取得
     st.subheader("🏢 銘柄・企業データの取得")
 
-    PRESET_STOCKS = [
-        "-- 代表銘柄から選択 --",
-        "トヨタ自動車 (7203)",
-        "武田薬品工業 (4502)",
-        "中外製薬 (4519)",
-        "第一三共 (4568)",
-        "エーザイ (4523)",
-        "アステラス製薬 (4503)",
-        "ソニーグループ (6758)",
-        "任天堂 (7974)",
-        "キーエンス (6861)",
-        "ソフトバンクグループ (9984)"
-    ]
+    PRESET_STOCKS = ["-- 代表銘柄から選択 --"] + LIFE_SCIENCE_PRESET_STOCKS
 
     preset_choice = st.selectbox(
-        "代表銘柄から選ぶ",
+        "代表銘柄から選ぶ（ライフサイエンス業界）",
         PRESET_STOCKS,
         index=0,
         key="preset_stock_selector",
-        help="東証上場の代表的な製薬・バイオ・大手企業の財務諸表を1クリックでロードします。"
+        help="東証上場の代表的なライフサイエンス（製薬・バイオ・医療機器・診断試薬）企業の財務諸表をロードします。"
     )
 
     stock_query_input = st.text_input(
@@ -382,12 +379,13 @@ with kpi_cols[5]:
 st.markdown("<br>", unsafe_allow_html=True)
 
 # ── タブナビゲーション ────────────────────────────────────────────────────
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
     "📊 業績サマリー",
     "📈 損益計算書 (P/L)",
     "🏛️ 貸借対照表 (B/S)",
     "🔬 デュポン分析 & 健全性診断",
     "🔮 経営What-Ifシミュレーター",
+    "⚔️ ライフサイエンス2社比較",
     "📁 データ管理 & レポート出力"
 ])
 
@@ -611,9 +609,139 @@ with tab5:
         st.plotly_chart(fig_sim, use_container_width=True)
 
 # ─────────────────────────────────────────────────────────────────────────
-# TAB 6: データ管理・エディタ & レポート出力
+# TAB 6: ライフサイエンス2社業績比較
 # ─────────────────────────────────────────────────────────────────────────
 with tab6:
+    st.subheader("⚔️ ライフサイエンス業界 2社業績・財務ベンチマーク比較")
+    st.caption("東証上場の代表的ライフサイエンス・製薬・バイオ・医療機器企業2社を選択し、事業規模、収益性、資本効率（デュポン分解）、安全性を多角的に比較します。")
+
+    col_sel_a, col_sel_b = st.columns(2)
+    with col_sel_a:
+        st.markdown("#### 🔵 企業 A")
+        choice_a = st.selectbox(
+            "代表銘柄から選ぶ (企業A)",
+            LIFE_SCIENCE_PRESET_STOCKS,
+            index=0,  # 武田薬品工業 (4502)
+            key="comp_choice_a"
+        )
+        custom_a = st.text_input("または銘柄コード・企業名 (企業A)", value="", placeholder="例: 4502, 武田薬品", key="comp_custom_a")
+
+    with col_sel_b:
+        st.markdown("#### 🟠 企業 B")
+        choice_b = st.selectbox(
+            "代表銘柄から選ぶ (企業B)",
+            LIFE_SCIENCE_PRESET_STOCKS,
+            index=1,  # 第一三共 (4568)
+            key="comp_choice_b"
+        )
+        custom_b = st.text_input("または銘柄コード・企業名 (企業B)", value="", placeholder="例: 4568, 第一三共", key="comp_custom_b")
+
+    btn_compare = st.button("⚔️ 2社の財務データを取得して比較実行", type="primary", use_container_width=True)
+
+    if "comparison_data" not in st.session_state:
+        st.session_state.comparison_data = None
+
+    if btn_compare:
+        # Determine query A
+        q_a = custom_a.strip() if custom_a and custom_a.strip() else choice_a
+        m_a = re.search(r"\((\d{4})\)", q_a)
+        target_a = m_a.group(1) if m_a else q_a
+
+        # Determine query B
+        q_b = custom_b.strip() if custom_b and custom_b.strip() else choice_b
+        m_b = re.search(r"\((\d{4})\)", q_b)
+        target_b = m_b.group(1) if m_b else q_b
+
+        with st.spinner(f"『{target_a}』と『{target_b}』の財務データを取得中..."):
+            try:
+                pl_a, bs_a, sum_a, disp_a = fetch_company_financials(target_a)
+                kpi_a = extract_company_kpis(pl_a, bs_a, sum_a, disp_a)
+
+                pl_b, bs_b, sum_b, disp_b = fetch_company_financials(target_b)
+                kpi_b = extract_company_kpis(pl_b, bs_b, sum_b, disp_b)
+
+                c_eval = evaluate_two_companies_comparison(kpi_a, kpi_b)
+
+                st.session_state.comparison_data = {
+                    "kpi_a": kpi_a,
+                    "kpi_b": kpi_b,
+                    "eval": c_eval
+                }
+                st.success(f"✨ {disp_a} と {disp_b} の比較データを取得しました！")
+            except Exception as e:
+                st.error(f"⚠️ 比較データ取得エラー: {str(e)}")
+
+    comp_res = st.session_state.comparison_data
+
+    if comp_res is None:
+        st.info("💡 上記の企業を選択し、「⚔️ 2社の財務データを取得して比較実行」をクリックしてください。（初期推奨: 武田薬品工業 vs 第一三共）")
+    else:
+        kpi_a = comp_res["kpi_a"]
+        kpi_b = comp_res["kpi_b"]
+        c_eval = comp_res["eval"]
+        ma = kpi_a["metrics"]
+        mb = kpi_b["metrics"]
+
+        st.markdown(f"### 📊 比較サマリー: 🔵 {kpi_a['name']} vs 🟠 {kpi_b['name']}")
+        st.caption(f"対象期: {kpi_a['name']} ({kpi_a['period_curr']}) ｜ {kpi_b['name']} ({kpi_b['period_curr']})")
+
+        # KPI比較テーブル
+        kpi_rows = [
+            ("売上高", f"{ma.rev_curr/100000:.1f} 億円", f"{mb.rev_curr/100000:.1f} 億円", "売上規模", ma.rev_curr, mb.rev_curr),
+            ("売上総利益率 (粗利率)", f"{ma.gp_margin_curr:.1f} %", f"{mb.gp_margin_curr:.1f} %", "製品付加価値・創薬力", ma.gp_margin_curr, mb.gp_margin_curr),
+            ("営業利益", f"{ma.op_curr/100000:.1f} 億円", f"{mb.op_curr/100000:.1f} 億円", "本業の稼ぐ力", ma.op_curr, mb.op_curr),
+            ("営業利益率", f"{ma.op_margin_curr:.1f} %", f"{mb.op_margin_curr:.1f} %", "営業収益性", ma.op_margin_curr, mb.op_margin_curr),
+            ("当期純利益", f"{ma.ni_curr/100000:.1f} 億円", f"{mb.ni_curr/100000:.1f} 億円", "最終利益", ma.ni_curr, mb.ni_curr),
+            ("当期純利益率", f"{ma.ni_margin_curr:.1f} %", f"{mb.ni_margin_curr:.1f} %", "純利益率", ma.ni_margin_curr, mb.ni_margin_curr),
+            ("自己資本比率", f"{ma.equity_ratio_curr:.1f} %", f"{mb.equity_ratio_curr:.1f} %", "財務健全性・バッファー", ma.equity_ratio_curr, mb.equity_ratio_curr),
+            ("ROE (自己資本当期純利益率)", f"{ma.roe_curr:.1f} %", f"{mb.roe_curr:.1f} %", "資本収益効率", ma.roe_curr, mb.roe_curr),
+            ("ROA (総資産利益率)", f"{ma.roa_curr:.1f} %", f"{mb.roa_curr:.1f} %", "総資産収益性", ma.roa_curr, mb.roa_curr),
+            ("総資産回転率", f"{ma.dupont_turnover_curr:.2f} 回", f"{mb.dupont_turnover_curr:.2f} 回", "資産活用速度", ma.dupont_turnover_curr, mb.dupont_turnover_curr),
+            ("財務レバレッジ", f"{ma.dupont_leverage_curr:.2f} 倍", f"{mb.dupont_leverage_curr:.2f} 倍", "負債活用度", mb.dupont_leverage_curr, ma.dupont_leverage_curr),
+        ]
+
+        df_comp_table = pd.DataFrame([
+            {
+                "財務指標": r[0],
+                f"🔵 {kpi_a['name']}": r[1],
+                f"🟠 {kpi_b['name']}": r[2],
+                "優位企業": f"🔵 {kpi_a['name']}" if r[4] > r[5] else (f"🟠 {kpi_b['name']}" if r[5] > r[4] else "同等"),
+                "指標の意義": r[3]
+            }
+            for r in kpi_rows
+        ])
+        st.dataframe(df_comp_table, use_container_width=True, hide_index=True)
+
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        # Charts Section
+        c_c1, c_c2 = st.columns(2)
+        with c_c1:
+            st.plotly_chart(plot_comparison_radar(kpi_a, kpi_b), use_container_width=True)
+        with c_c2:
+            st.plotly_chart(plot_comparison_scale_bars(kpi_a, kpi_b), use_container_width=True)
+
+        c_c3, c_c4 = st.columns(2)
+        with c_c3:
+            st.plotly_chart(plot_comparison_margins(kpi_a, kpi_b), use_container_width=True)
+        with c_c4:
+            st.plotly_chart(plot_comparison_dupont(kpi_a, kpi_b), use_container_width=True)
+
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        # AI / Analyst Commentary Box
+        st.markdown(f"""
+        <div class="ai-box">
+            <div class="ai-box-title">🤖 ライフサイエンス業界アナリスト 2社業績比較診断レポート</div>
+            <div class="ai-box-content">{c_eval['commentary'].replace(chr(10), '<br>')}</div>
+            <div class="ai-box-meta">判定: 規模首位={c_eval['scale_leader']} ｜ 収益性首位={c_eval['profitability_leader']} ｜ 安全性首位={c_eval['safety_leader']} ｜ ROE首位={c_eval['roe_leader']}</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+# ─────────────────────────────────────────────────────────────────────────
+# TAB 7: データ管理・エディタ & レポート出力
+# ─────────────────────────────────────────────────────────────────────────
+with tab7:
     st.subheader("📁 データ直接編集 & スタンドアロンレポート出力")
     
     st.markdown("#### 1. 画面上でのデータ直接編集（Data Editor）")
